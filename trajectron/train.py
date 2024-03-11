@@ -20,6 +20,8 @@ from model.dataset import EnvironmentDataset, collate
 from tensorboardX import SummaryWriter
 # torch.autograd.set_detect_anomaly(True)
 
+# Comments:
+# You can check all the args values in the argument_parser.py file.
 if not torch.cuda.is_available() or args.device == 'cpu':
     args.device = torch.device('cpu')
 else:

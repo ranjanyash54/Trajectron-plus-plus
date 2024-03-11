@@ -7,6 +7,7 @@ import dill
 sys.path.append("../../trajectron")
 from environment import Environment, Scene, Node
 from utils import maybe_makedirs
+# in trajectron/environment/data_utils.py
 from environment import derivative_of
 
 desired_max_time = 100
@@ -82,8 +83,13 @@ nl = 0
 l = 0
 maybe_makedirs('../processed')
 data_columns = pd.MultiIndex.from_product([['position', 'velocity', 'acceleration'], ['x', 'y']])
+    # Comments:
+    # MultiIndex: [('position', 'x'), ('position', 'y') ...]
 for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
     for data_class in ['train', 'val', 'test']:
+        # Comments:
+        # Environment object is created for each source and data class. There could be
+        # multiple scenes inside an environment. A scene is based on a txt file inside the directory.
         env = Environment(node_type_list=['PEDESTRIAN'], standardization=standardization)
         attention_radius = dict()
         attention_radius[(env.NodeType.PEDESTRIAN, env.NodeType.PEDESTRIAN)] = 3.0
@@ -99,6 +105,9 @@ for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
                     full_data_path = os.path.join(subdir, file)
                     print('At', full_data_path)
 
+                    # Comments:
+                    # Downcast frameid and trackid to integers. Frameid is the timestamp
+                    # and trackid is the object id. Make the mean of pos_x and pos_y to 0.
                     data = pd.read_csv(full_data_path, sep='\t', index_col=False, header=None)
                     data.columns = ['frame_id', 'track_id', 'pos_x', 'pos_y']
                     data['frame_id'] = pd.to_numeric(data['frame_id'], downcast='integer')
@@ -118,8 +127,15 @@ for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
 
                     max_timesteps = data['frame_id'].max()
 
+                    # Comment:
+                    # Create a scene object for each txt file in a source and dataclass for (max_time + 1). 
+                    # Not sure what the augment function is for. Each scene object will be appended to scenes list which will be stored inside env object.
                     scene = Scene(timesteps=max_timesteps+1, dt=dt, name=desired_source + "_" + data_class, aug_func=augment if data_class == 'train' else None)
 
+                    # Comment:
+                    # For each object(node), find the position, velocity and acceleration.
+                    # Create a node object and store these values inside node_data. 
+                    # Append the node objects to the scene object.
                     for node_id in pd.unique(data['node_id']):
 
                         node_df = data[data['node_id'] == node_id]
@@ -151,6 +167,10 @@ for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
                         node.first_timestep = new_first_idx
 
                         scene.nodes.append(node)
+                    # Comment:
+                    # If the dataclass is training, create a augmented list which will contained
+                    # the coordiantes of objects rotated by an angle and there projected velocity
+                    # and acceleration.
                     if data_class == 'train':
                         scene.augmented = list()
                         angles = np.arange(0, 360, 15) if data_class == 'train' else [0]
@@ -163,6 +183,7 @@ for desired_source in ['eth', 'hotel', 'univ', 'zara1', 'zara2']:
 
         env.scenes = scenes
 
+        # Save the env object
         if len(scenes) > 0:
             with open(data_dict_path, 'wb') as f:
                 dill.dump(env, f, protocol=dill.HIGHEST_PROTOCOL)

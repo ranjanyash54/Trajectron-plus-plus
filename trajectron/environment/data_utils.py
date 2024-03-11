@@ -16,6 +16,25 @@ def make_continuous_copy(alpha):
     return continuous_x
 
 
+'''
+This function computes the derivative of the input array x.
+If radian is set to True, it first ensures that x is continuous
+across π by calling the make_continuous_copy function.
+It creates a boolean mask not_nan_mask to filter out NaN
+values from the input array x.
+It applies this mask to get the non-NaN elements of x.
+If there are fewer than 2 non-NaN elements, it returns an array of zeros.
+Otherwise, it computes the derivative using np.ediff1d,
+which calculates the difference between consecutive elements.
+The to_begin parameter is used to specify the value to use as
+the difference for the first element (since there's no previous element).
+The derivative array is then assigned to dx while maintaining
+NaN values for elements corresponding to NaN in the input array.
+Finally, it returns the derivative array.
+This code essentially provides functions to compute the derivative
+of an array while handling special cases such as NaN values and
+ensuring continuity across π when working with angles in radians.
+'''
 def derivative_of(x, dt=1, radian=False):
     if radian:
         x = make_continuous_copy(x)

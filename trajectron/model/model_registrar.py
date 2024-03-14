@@ -10,7 +10,7 @@ def get_model_device(model):
 class ModelRegistrar(nn.Module):
     def __init__(self, model_dir, device):
         super(ModelRegistrar, self).__init__()
-        self.model_dict = nn.ModuleDict()
+        self.model_dict = nn.ModuleDict() # Holds submodules in a dictionary.
         self.model_dir = model_dir
         self.device = device
 

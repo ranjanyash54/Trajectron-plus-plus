@@ -50,6 +50,9 @@ class NodeTypeDataset(data.Dataset):
         self.len = len(self.index)
         self.edge_types = [edge_type for edge_type in env.get_edge_types() if edge_type[0] is node_type]
 
+    # Yash: If I understand correctly, this function calculates the total number of
+    # timestamp and objects of this nodetype. so if there are 2 objects for 3 timestamp
+    # this function will return 6.
     def index_env(self, node_freq_mult, scene_freq_mult, **kwargs):
         index = list()
         for scene in self.env.scenes:

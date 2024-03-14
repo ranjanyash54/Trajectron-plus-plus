@@ -135,20 +135,25 @@ class TemporalSceneGraph(object):
         position_cube = np.full((total_timesteps, N, 2), np.nan)
 
         adj_cube = np.zeros((total_timesteps, N, N), dtype=np.int8)
+        # Yash: This matrix will store the distance between objects at all timesteps.
         dist_cube = np.zeros((total_timesteps, N, N), dtype=np.float)
 
         node_type_mat = np.zeros((N, N), dtype=np.int8)
+        # Yash: Store the attention radius between nodes (using node type)
         node_attention_mat = np.zeros((N, N), dtype=np.float)
 
         for node_idx, node in enumerate(nodes):
+            # Yash: Set the position matrix of the nodes
             if online:
                 # RingBuffers do not have a fixed constant size. Instead, they grow up to their capacity. Thus,
                 # we need to fill the values preceding the RingBuffer values with NaNs to make them fill the
                 # position_cube.
                 position_cube[-scene_temp_dict[node].shape[0]:, node_idx] = scene_temp_dict[node]
             else:
+                # Yash: How many entries will the scene_temp_dict will contain?
                 position_cube[:, node_idx] = scene_temp_dict[node]
 
+            # Yash: Set the node_type matrix and node_attention matrix
             node_type_mat[:, node_idx] = node.type.value
             for node_idx_from, node_from in enumerate(nodes):
                 node_attention_mat[node_idx_from, node_idx] = attention_radius[(node_from.type, node.type)]
@@ -156,6 +161,9 @@ class TemporalSceneGraph(object):
         np.fill_diagonal(node_type_mat, 0)
 
         for timestep in range(position_cube.shape[0]):
+            # Yash: pdist calculates pairwise Euclidean distances between the positions
+            # of objects at a particular timestep, and squareform converts this output
+            # into a square, symmetric distance matrix.
             dists = squareform(pdist(position_cube[timestep], metric='euclidean'))
 
             # Put a 1 for all agent pairs which are closer than the edge_radius.
@@ -163,6 +171,7 @@ class TemporalSceneGraph(object):
             # This is accepted as nan <= x evaluates to False
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
+                # Yash: Why multiply by node_type_mat.
                 adj_matrix = (dists <= node_attention_mat).astype(np.int8) * node_type_mat
 
             # Remove self-loops.
@@ -186,6 +195,7 @@ class TemporalSceneGraph(object):
                   edge_scaling=edge_scaling)
         return tsg
 
+    # Yash: Don't understand this.
     @staticmethod
     def calculate_edge_scaling(adj_cube, edge_addition_filter, edge_removal_filter):
         shifted_right = np.pad(adj_cube, ((len(edge_addition_filter) - 1, 0), (0, 0), (0, 0)), 'constant', constant_values=0)

@@ -31,6 +31,7 @@ class Trajectron(object):
             )
         self.pred_state = self.hyperparams['pred_state']
 
+    # Yash: Adds a MultimodalGenerativeCVAE for each node type.
     def set_environment(self, env):
         self.env = env
 

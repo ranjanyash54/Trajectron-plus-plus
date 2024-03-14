@@ -20,7 +20,7 @@ from model.dataset import EnvironmentDataset, collate
 from tensorboardX import SummaryWriter
 # torch.autograd.set_detect_anomaly(True)
 
-# Comments:
+# Yash:
 # You can check all the args values in the argument_parser.py file.
 if not torch.cuda.is_available() or args.device == 'cpu':
     args.device = torch.device('cpu')
@@ -55,21 +55,21 @@ def main():
         hyperparams = json.load(conf_json)
 
     # Add hyperparams from arguments
-    hyperparams['dynamic_edges'] = args.dynamic_edges
+    hyperparams['dynamic_edges'] = args.dynamic_edges # Yash: What is a dynamic edge?
     hyperparams['edge_state_combine_method'] = args.edge_state_combine_method
     hyperparams['edge_influence_combine_method'] = args.edge_influence_combine_method
-    hyperparams['edge_addition_filter'] = args.edge_addition_filter
+    hyperparams['edge_addition_filter'] = args.edge_addition_filter # Yash: What exactly is this?
     hyperparams['edge_removal_filter'] = args.edge_removal_filter
     hyperparams['batch_size'] = args.batch_size
-    hyperparams['k_eval'] = args.k_eval
+    hyperparams['k_eval'] = args.k_eval # Yash: How many samples to take duraing evalutaion
     hyperparams['offline_scene_graph'] = args.offline_scene_graph
     hyperparams['incl_robot_node'] = args.incl_robot_node
-    hyperparams['node_freq_mult_train'] = args.node_freq_mult_train
-    hyperparams['node_freq_mult_eval'] = args.node_freq_mult_eval
-    hyperparams['scene_freq_mult_train'] = args.scene_freq_mult_train
-    hyperparams['scene_freq_mult_eval'] = args.scene_freq_mult_eval
-    hyperparams['scene_freq_mult_viz'] = args.scene_freq_mult_viz
-    hyperparams['edge_encoding'] = not args.no_edge_encoding
+    hyperparams['node_freq_mult_train'] = args.node_freq_mult_train # Yash: Not clear what is frequency multiplying
+    hyperparams['node_freq_mult_eval'] = args.node_freq_mult_eval # Yash: Not clear
+    hyperparams['scene_freq_mult_train'] = args.scene_freq_mult_train # Yash: Not clear
+    hyperparams['scene_freq_mult_eval'] = args.scene_freq_mult_eval # Yash: Not clear
+    hyperparams['scene_freq_mult_viz'] = args.scene_freq_mult_viz # Yash: Not clear
+    hyperparams['edge_encoding'] = not args.no_edge_encoding  # Yash: Whether to use neighbors edge encoding
     hyperparams['use_map_encoding'] = args.map_encoding
     hyperparams['augment'] = args.augment
     hyperparams['override_attention_radius'] = args.override_attention_radius
@@ -93,6 +93,7 @@ def main():
 
     log_writer = None
     model_dir = None
+    # Yash: Default value of args.log_dir is ../experiments/logs/
     if not args.debug:
         # Create the log and model directiory if they're not present.
         model_dir = os.path.join(args.log_dir,
@@ -111,21 +112,26 @@ def main():
     with open(train_data_path, 'rb') as f:
         train_env = dill.load(f, encoding='latin1')
 
+    # Yash: Override attention radius is given in the args
     for attention_radius_override in args.override_attention_radius:
         node_type1, node_type2, attention_radius = attention_radius_override.split(' ')
         train_env.attention_radius[(node_type1, node_type2)] = float(attention_radius)
 
+    # Yash: Can ignore robot reference for now.
     if train_env.robot_type is None and hyperparams['incl_robot_node']:
         train_env.robot_type = train_env.NodeType[0]  # TODO: Make more general, allow the user to specify?
         for scene in train_env.scenes:
             scene.add_robot_from_nodes(train_env.robot_type)
 
     train_scenes = train_env.scenes
+    # Yash: Not clear
     train_scenes_sample_probs = train_env.scenes_freq_mult_prop if args.scene_freq_mult_train else None
 
+    # Yash: /trajectron/model/dataset.py
     train_dataset = EnvironmentDataset(train_env,
-                                       hyperparams['state'],
-                                       hyperparams['pred_state'],
+                                       hyperparams['state'],    # Yash: The structure of the input state for each object type.
+                                                                # /config/config.json
+                                       hyperparams['pred_state'], # YashL The structure of predicted state
                                        scene_freq_mult=hyperparams['scene_freq_mult_train'],
                                        node_freq_mult=hyperparams['node_freq_mult_train'],
                                        hyperparams=hyperparams,
@@ -133,10 +139,13 @@ def main():
                                        min_future_timesteps=hyperparams['prediction_horizon'],
                                        return_robot=not args.incl_robot_node)
     train_data_loader = dict()
+    # Yash: the train_dataset has a node_type_dataset for each node type
     for node_type_data_set in train_dataset:
+        # Yash: Check the comment on the node length
         if len(node_type_data_set) == 0:
             continue
 
+        # Yash: Load the data of the specific node type.
         node_type_dataloader = utils.data.DataLoader(node_type_data_set,
                                                      collate_fn=collate,
                                                      pin_memory=False if args.device is 'cpu' else True,
@@ -147,6 +156,7 @@ def main():
 
     print(f"Loaded training data from {train_data_path}")
 
+    # Yash: Same for Eval dataset.
     eval_scenes = []
     eval_scenes_sample_probs = None
     if args.eval_every is not None:
@@ -193,6 +203,8 @@ def main():
     # Offline Calculate Scene Graph
     if hyperparams['offline_scene_graph'] == 'yes':
         print(f"Offline calculating scene graphs")
+        # Yash: The temporal scene graph is stored in
+        # scene.temporal_scene_graph variable
         for i, scene in enumerate(train_scenes):
             scene.calculate_scene_graph(train_env.attention_radius,
                                         hyperparams['edge_addition_filter'],
@@ -205,13 +217,16 @@ def main():
                                         hyperparams['edge_removal_filter'])
             print(f"Created Scene Graph for Evaluation Scene {i}")
 
+    # Yash: Keeps track of all the models
     model_registrar = ModelRegistrar(model_dir, args.device)
 
+    # Yash: /trajectron/model/trajectron.py
     trajectron = Trajectron(model_registrar,
                             hyperparams,
                             log_writer,
                             args.device)
 
+    # Yash: Adds a MultimodalGenerativeCVAE for each node type.
     trajectron.set_environment(train_env)
     trajectron.set_annealing_params()
     print('Created Training Model.')

@@ -75,7 +75,7 @@ class Trajectron(object):
 
         x = x_t.to(self.device)
         y = y_t.to(self.device)
-        x_st_t = x_st_t.to(self.device)
+        x_st_t = x_st_t.to(self.device) # Yash: st for Standardize
         y_st_t = y_st_t.to(self.device)
         if robot_traj_st_t is not None:
             robot_traj_st_t = robot_traj_st_t.to(self.device)

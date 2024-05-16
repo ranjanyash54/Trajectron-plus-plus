@@ -33,16 +33,18 @@ class MultimodalGenerativeCVAE(object):
         self.ph = self.hyperparams['prediction_horizon']
         self.state = self.hyperparams['state']
         self.pred_state = self.hyperparams['pred_state'][node_type]
-        self.state_length = int(np.sum([len(entity_dims) for entity_dims in self.state[node_type].values()]))
+        self.state_length = int(np.sum([len(entity_dims) for entity_dims in self.state[node_type].values()])) #Yash: (coords + vel + accel = 6)
         if self.hyperparams['incl_robot_node']:
             self.robot_state_length = int(
                 np.sum([len(entity_dims) for entity_dims in self.state[env.robot_type].values()])
             )
-        self.pred_state_length = int(np.sum([len(entity_dims) for entity_dims in self.pred_state.values()]))
+        self.pred_state_length = int(np.sum([len(entity_dims) for entity_dims in self.pred_state.values()])) #Yash: (coords = 2)
 
         edge_types_str = [DirectedEdge.get_str_from_types(*edge_type) for edge_type in self.edge_types]
+        # Yash: Create and store models (elaborate)
         self.create_graphical_model(edge_types_str)
 
+        # Yash: Not sure, I think it sets the limits of dynamic motion possible
         dynamic_class = getattr(dynamic_module, hyperparams['dynamic'][self.node_type]['name'])
         dyn_limits = hyperparams['dynamic'][self.node_type]['limits']
         self.dynamic = dynamic_class(self.env.scenes[0].dt, dyn_limits, device,
@@ -62,9 +64,9 @@ class MultimodalGenerativeCVAE(object):
         #   Node History Encoder   #
         ############################
         self.add_submodule(self.node_type + '/node_history_encoder',
-                           model_if_absent=nn.LSTM(input_size=self.state_length,
-                                                   hidden_size=self.hyperparams['enc_rnn_dim_history'],
-                                                   batch_first=True))
+                           model_if_absent=nn.LSTM(input_size=self.state_length, # Yash: 6
+                                                   hidden_size=self.hyperparams['enc_rnn_dim_history'], # Yash: 32
+                                                   batch_first=True)) # Yash: Weight(input_size, 4*hidden_size)
 
         ###########################
         #   Node Future Encoder   #
@@ -76,6 +78,7 @@ class MultimodalGenerativeCVAE(object):
                                                    hidden_size=self.hyperparams['enc_rnn_dim_future'],
                                                    bidirectional=True,
                                                    batch_first=True))
+        # Yash: Did not understood this.
         # These are related to how you initialize states for the node future encoder.
         self.add_submodule(self.node_type + '/node_future_encoder/initial_h',
                            model_if_absent=nn.Linear(self.state_length,
@@ -107,6 +110,8 @@ class MultimodalGenerativeCVAE(object):
             ##############################
             #   Edge Influence Encoder   #
             ##############################
+           ### Yash: This takes input, the output of the edge encoder (32 in code, 8 in paper and ouputs the final edge influence incoding)
+           ### Yash: Check the final output dimension.
             # NOTE: The edge influence encoding happens during calls
             # to forward or incremental_forward, so we don't create
             # a model for it here for the max and sum variants.
@@ -156,10 +161,10 @@ class MultimodalGenerativeCVAE(object):
         #   Various Fully-Connected Layers from Encoder to Latent Variable   #
         ######################################################################
         # Node History Encoder
-        x_size = self.hyperparams['enc_rnn_dim_history']
+        x_size = self.hyperparams['enc_rnn_dim_history'] #Yash: 32
         if self.hyperparams['edge_encoding']:
             #              Edge Encoder
-            x_size += self.eie_output_dims
+            x_size += self.eie_output_dims # Yash: Mostly 32
         if self.hyperparams['incl_robot_node']:
             #              Future Conditional Encoder
             x_size += 4 * self.hyperparams['enc_rnn_dim_future']
@@ -167,19 +172,19 @@ class MultimodalGenerativeCVAE(object):
             #              Map Encoder
             x_size += self.hyperparams['map_encoder'][self.node_type]['output_size']
 
-        z_size = self.hyperparams['N'] * self.hyperparams['K']
+        z_size = self.hyperparams['N'] * self.hyperparams['K'] # Yash: 1 * 25
 
         if self.hyperparams['p_z_x_MLP_dims'] is not None:
             self.add_submodule(self.node_type + '/p_z_x',
                                model_if_absent=nn.Linear(x_size, self.hyperparams['p_z_x_MLP_dims']))
-            hx_size = self.hyperparams['p_z_x_MLP_dims']
+            hx_size = self.hyperparams['p_z_x_MLP_dims'] # Yash: 32
         else:
-            hx_size = x_size
+            hx_size = x_size # Yash: 64
 
         self.add_submodule(self.node_type + '/hx_to_z',
-                           model_if_absent=nn.Linear(hx_size, self.latent.z_dim))
+                           model_if_absent=nn.Linear(hx_size, self.latent.z_dim)) #Yash: 32x25
 
-        if self.hyperparams['q_z_xy_MLP_dims'] is not None:
+        if self.hyperparams['q_z_xy_MLP_dims'] is not None: # Yash: Is Null for all datasets.
             self.add_submodule(self.node_type + '/q_z_xy',
                                #                                           Node Future Encoder
                                model_if_absent=nn.Linear(x_size + 4 * self.hyperparams['enc_rnn_dim_future'],
@@ -187,7 +192,7 @@ class MultimodalGenerativeCVAE(object):
             hxy_size = self.hyperparams['q_z_xy_MLP_dims']
         else:
             #                           Node Future Encoder
-            hxy_size = x_size + 4 * self.hyperparams['enc_rnn_dim_future']
+            hxy_size = x_size + 4 * self.hyperparams['enc_rnn_dim_future'] # Yash: enc_rnn_dim_future: 32, Why 4* though? Check line 128, still not clear.
 
         self.add_submodule(self.node_type + '/hxy_to_z',
                            model_if_absent=nn.Linear(hxy_size, self.latent.z_dim))
@@ -249,12 +254,12 @@ class MultimodalGenerativeCVAE(object):
                                        decoder_hidden_state_dim=self.state_length))
                 edge_encoder_input_size = self.state_length + neighbor_state_length
 
-            else:
-                edge_encoder_input_size = self.state_length + neighbor_state_length
+            else: # Yash: Lets take this to be true (also easiest to calculate)
+                edge_encoder_input_size = self.state_length + neighbor_state_length # Yash: 6 + 6
 
             self.add_submodule(edge_type + '/edge_encoder',
-                               model_if_absent=nn.LSTM(input_size=edge_encoder_input_size,
-                                                       hidden_size=self.hyperparams['enc_rnn_dim_edge'],
+                               model_if_absent=nn.LSTM(input_size=edge_encoder_input_size, # Yash: 12
+                                                       hidden_size=self.hyperparams['enc_rnn_dim_edge'], # Yash: In paper it is 8, but in config it is 32
                                                        batch_first=True))
 
     def create_graphical_model(self, edge_types):
@@ -274,6 +279,7 @@ class MultimodalGenerativeCVAE(object):
         #####################
         #   Edge Encoders   #
         #####################
+        # Yash: This is True
         if self.hyperparams['edge_encoding']:
             self.create_edge_models(edge_types)
 

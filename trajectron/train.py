@@ -227,6 +227,7 @@ def main():
                             args.device)
 
     # Yash: Adds a MultimodalGenerativeCVAE for each node type.
+    #       Creates and stores models for each node type
     trajectron.set_environment(train_env)
     trajectron.set_annealing_params()
     print('Created Training Model.')
@@ -246,6 +247,7 @@ def main():
     for node_type in train_env.NodeType:
         if node_type not in hyperparams['pred_state']:
             continue
+                                            # Yash: Get all the models except the CNN
         optimizer[node_type] = optim.Adam([{'params': model_registrar.get_all_but_name_match('map_encoder').parameters()},
                                            {'params': model_registrar.get_name_match('map_encoder').parameters(), 'lr':0.0008}], lr=hyperparams['learning_rate'])
         # Set Learning Rate
@@ -265,7 +267,7 @@ def main():
         for node_type, data_loader in train_data_loader.items():
             curr_iter = curr_iter_node_type[node_type]
             pbar = tqdm(data_loader, ncols=80)
-            for batch in pbar:
+            for batch in pbar: # Yash: this calls the __getitem__ function of nodetype dataset
                 trajectron.set_curr_iter(curr_iter)
                 trajectron.step_annealers(node_type)
                 optimizer[node_type].zero_grad()

@@ -1,5 +1,4 @@
 {
-
   "batch_size": 256,
   "grad_clip": 1.0,
 
@@ -65,15 +64,15 @@
   "z_logit_clip_divisor": 5,
 
   "dynamic": {
-      "PEDESTRIAN": {
-        "name": "SingleIntegrator",
-        "distribution": true,
-        "limits": {}
-      }
+    "PEDESTRIAN": {
+      "name": "SingleIntegrator",
+      "distribution": true,
+      "limits": {}
+    }
   },
 
   "state": {
-      "PEDESTRIAN": {
+    "PEDESTRIAN": {
       "position": ["x", "y"],
       "velocity": ["x", "y"],
       "acceleration": ["x", "y"]

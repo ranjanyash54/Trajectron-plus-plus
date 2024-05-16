@@ -53,6 +53,7 @@ class NodeTypeDataset(data.Dataset):
     # Yash: If I understand correctly, this function calculates the total number of
     # timestamp and objects of this nodetype. so if there are 2 objects for 3 timestamp
     # this function will return 6.
+    # Yash: This creates a list of tupes of (scene, time, node)
     def index_env(self, node_freq_mult, scene_freq_mult, **kwargs):
         index = list()
         for scene in self.env.scenes:
@@ -68,6 +69,9 @@ class NodeTypeDataset(data.Dataset):
     def __len__(self):
         return self.len
 
+    # Yash: For a nodetype, if someone indexes the nodetype dataset with (scene, time, node_id)
+    # this function will be called which will return the previous coords (last max_ht), future
+    # coords (next max_ft) and neighborship data.
     def __getitem__(self, i):
         (scene, t, node) = self.index[i]
 

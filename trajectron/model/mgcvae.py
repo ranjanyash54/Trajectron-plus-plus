@@ -203,14 +203,14 @@ class MultimodalGenerativeCVAE(object):
         if self.hyperparams['incl_robot_node']:
             decoder_input_dims = self.pred_state_length + self.robot_state_length + z_size + x_size
         else:
-            decoder_input_dims = self.pred_state_length + z_size + x_size
+            decoder_input_dims = self.pred_state_length + z_size + x_size # Yash: 2 + 25 + 64
 
         self.add_submodule(self.node_type + '/decoder/state_action',
                            model_if_absent=nn.Sequential(
                                nn.Linear(self.state_length, self.pred_state_length)))
 
         self.add_submodule(self.node_type + '/decoder/rnn_cell',
-                           model_if_absent=nn.GRUCell(decoder_input_dims, self.hyperparams['dec_rnn_dim']))
+                           model_if_absent=nn.GRUCell(decoder_input_dims, self.hyperparams['dec_rnn_dim'])) # Yash: 128
         self.add_submodule(self.node_type + '/decoder/initial_h',
                            model_if_absent=nn.Linear(z_size + x_size, self.hyperparams['dec_rnn_dim']))
 
@@ -809,12 +809,13 @@ class MultimodalGenerativeCVAE(object):
         cell = self.node_modules[self.node_type + '/decoder/rnn_cell']
         initial_h_model = self.node_modules[self.node_type + '/decoder/initial_h']
 
-        initial_state = initial_h_model(zx)
+        initial_state = initial_h_model(zx) # Yash: Linear Layer, ouputs the initial value of input h0 for the GRU
+        # Yash: What will be the shape of initial_state ?
 
         log_pis, mus, log_sigmas, corrs, a_sample = [], [], [], [], []
 
         # Infer initial action state for node from current state
-        a_0 = self.node_modules[self.node_type + '/decoder/state_action'](n_s_t0)
+        a_0 = self.node_modules[self.node_type + '/decoder/state_action'](n_s_t0) # Yash: Why was this required?
 
         state = initial_state
         if self.hyperparams['incl_robot_node']:
@@ -822,7 +823,7 @@ class MultimodalGenerativeCVAE(object):
                                 a_0.repeat(num_samples * num_components, 1),
                                 x_nr_t.repeat(num_samples * num_components, 1)], dim=1)
         else:
-            input_ = torch.cat([zx, a_0.repeat(num_samples * num_components, 1)], dim=1)
+            input_ = torch.cat([zx, a_0.repeat(num_samples * num_components, 1)], dim=1) # Yash: z + x + y
 
         for j in range(ph):
             h_state = cell(input_, state)
@@ -905,7 +906,7 @@ class MultimodalGenerativeCVAE(object):
             - kl_obj: KL Divergenze between q and p
         """
         if mode == ModeKeys.TRAIN:
-            sample_ct = self.hyperparams['k']
+            sample_ct = self.hyperparams['k'] # Yash: 1
         elif mode == ModeKeys.EVAL:
             sample_ct = self.hyperparams['k_eval']
         elif mode == ModeKeys.PREDICT:
@@ -913,8 +914,8 @@ class MultimodalGenerativeCVAE(object):
             if num_samples is None:
                 raise ValueError("num_samples cannot be None with mode == PREDICT.")
 
-        self.latent.q_dist = self.q_z_xy(mode, x, y_e)
-        self.latent.p_dist = self.p_z_x(mode, x)
+        self.latent.q_dist = self.q_z_xy(mode, x, y_e) # Yash: Returns the td.OneHotCategorical object based on the softmax of ouput of z
+        self.latent.p_dist = self.p_z_x(mode, x) # Yash: Same but with differnct input
 
         z = self.latent.sample_q(sample_ct, mode)
 

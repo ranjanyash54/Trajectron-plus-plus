@@ -62,7 +62,7 @@ class NodeTypeDataset(data.Dataset):
                 for node in nodes:
                     index += [(scene, t, node)] *\
                              (scene.frequency_multiplier if scene_freq_mult else 1) *\
-                             (node.frequency_multiplier if node_freq_mult else 1)
+                             (node.frequency_multiplier if node_freq_mult else 1) # Yash: Both of these are 1
 
         return index
 

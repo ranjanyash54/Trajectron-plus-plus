@@ -803,19 +803,23 @@ class MultimodalGenerativeCVAE(object):
         ph = prediction_horizon
         pred_dim = self.pred_state_length
 
-        z = torch.reshape(z_stacked, (-1, self.latent.z_dim))
-        zx = torch.cat([z, x.repeat(num_samples * num_components, 1)], dim=1)
+        # Yash: x.size() = batch_size * x_len
+        # Yash: z_stacked.size() = 10 * batch_size * 10 (same indexed arrays are stacked together)
+        # Yash: num_samples=1, num_componenets=10
+
+        z = torch.reshape(z_stacked, (-1, self.latent.z_dim)) # Yash: 2560 * 10
+        zx = torch.cat([z, x.repeat(num_samples * num_components, 1)], dim=1) # Yash: All of x concated with the [1, 0, 0 ..] then all of x concated with [0, 1, 0 ..]
 
         cell = self.node_modules[self.node_type + '/decoder/rnn_cell']
         initial_h_model = self.node_modules[self.node_type + '/decoder/initial_h']
 
         initial_state = initial_h_model(zx) # Yash: Linear Layer, ouputs the initial value of input h0 for the GRU
-        # Yash: What will be the shape of initial_state ?
+        # Yash: What will be the shape of initial_state ? Answer: 2560*128(decoder_rnn_dim)
 
         log_pis, mus, log_sigmas, corrs, a_sample = [], [], [], [], []
 
         # Infer initial action state for node from current state
-        a_0 = self.node_modules[self.node_type + '/decoder/state_action'](n_s_t0) # Yash: Why was this required?
+        a_0 = self.node_modules[self.node_type + '/decoder/state_action'](n_s_t0) # Yash: Size: 256*2
 
         state = initial_state
         if self.hyperparams['incl_robot_node']:
@@ -826,21 +830,22 @@ class MultimodalGenerativeCVAE(object):
             input_ = torch.cat([zx, a_0.repeat(num_samples * num_components, 1)], dim=1) # Yash: z + x + y
 
         for j in range(ph):
-            h_state = cell(input_, state)
+            h_state = cell(input_, state) # Yash: Size: 2560*128
             log_pi_t, mu_t, log_sigma_t, corr_t = self.project_to_GMM_params(h_state)
+            # Yash: (2560*1), (2560*2), (2560*2), (2560*1)
 
             gmm = GMM2D(log_pi_t, mu_t, log_sigma_t, corr_t)  # [k;bs, pred_dim]
 
             if mode == ModeKeys.PREDICT and gmm_mode:
                 a_t = gmm.mode()
             else:
-                a_t = gmm.rsample()
+                a_t = gmm.rsample() # Yash: 2560*2
 
             if num_components > 1:
                 if mode == ModeKeys.PREDICT:
                     log_pis.append(self.latent.p_dist.logits.repeat(num_samples, 1, 1))
                 else:
-                    log_pis.append(self.latent.q_dist.logits.repeat(num_samples, 1, 1))
+                    log_pis.append(self.latent.q_dist.logits.repeat(num_samples, 1, 1)) # Yash: Shape: 256*1*10 (batch_size, 1, num_components)
             else:
                 log_pis.append(
                     torch.ones_like(corr_t.reshape(num_samples, num_components, -1).permute(0, 2, 1).reshape(-1, 1))
@@ -849,30 +854,30 @@ class MultimodalGenerativeCVAE(object):
             mus.append(
                 mu_t.reshape(
                     num_samples, num_components, -1, 2
-                ).permute(0, 2, 1, 3).reshape(-1, 2 * num_components)
+                ).permute(0, 2, 1, 3).reshape(-1, 2 * num_components) # Yash: 256*20
             )
             log_sigmas.append(
                 log_sigma_t.reshape(
                     num_samples, num_components, -1, 2
-                ).permute(0, 2, 1, 3).reshape(-1, 2 * num_components))
+                ).permute(0, 2, 1, 3).reshape(-1, 2 * num_components)) # Yash: 256*20
             corrs.append(
                 corr_t.reshape(
                     num_samples, num_components, -1
-                ).permute(0, 2, 1).reshape(-1, num_components))
+                ).permute(0, 2, 1).reshape(-1, num_components)) # Yash: 256*10
 
             if self.hyperparams['incl_robot_node']:
                 dec_inputs = [zx, a_t, y_r[:, j].repeat(num_samples * num_components, 1)]
             else:
                 dec_inputs = [zx, a_t]
             input_ = torch.cat(dec_inputs, dim=1)
-            state = h_state
+            state = h_state # Yash: size 2560*128
 
         log_pis = torch.stack(log_pis, dim=1)
         mus = torch.stack(mus, dim=1)
         log_sigmas = torch.stack(log_sigmas, dim=1)
         corrs = torch.stack(corrs, dim=1)
 
-        a_dist = GMM2D(torch.reshape(log_pis, [num_samples, -1, ph, num_components]),
+        a_dist = GMM2D(torch.reshape(log_pis, [num_samples, -1, ph, num_components]), # Yash: Size: [1, 256, 10, 10]
                        torch.reshape(mus, [num_samples, -1, ph, num_components * pred_dim]),
                        torch.reshape(log_sigmas, [num_samples, -1, ph, num_components * pred_dim]),
                        torch.reshape(corrs, [num_samples, -1, ph, num_components]))

@@ -8,7 +8,21 @@ class SingleIntegrator(Dynamic):
     def init_constants(self):
         self.F = torch.eye(4, device=self.device, dtype=torch.float32)
         self.F[0:2, 2:] = torch.eye(2, device=self.device, dtype=torch.float32) * self.dt
+        """
+        Yash: self.F
+        [[1.0000, 0.0000, 0.1000, 0.0000],
+        [0.0000, 1.0000, 0.0000, 0.1000],
+        [0.0000, 0.0000, 1.0000, 0.0000],
+        [0.0000, 0.0000, 0.0000, 1.0000]]
+        """
         self.F_t = self.F.transpose(-2, -1)
+        """
+        Yash: self.F_t
+        [[1.0000, 0.0000, 0.0000, 0.0000],
+        [0.0000, 1.0000, 0.0000, 0.0000],
+        [0.1000, 0.0000, 1.0000, 0.0000],
+        [0.0000, 0.1000, 0.0000, 1.0000]]
+        """
 
     def integrate_samples(self, v, x=None):
         """
@@ -44,21 +58,26 @@ class SingleIntegrator(Dynamic):
         :param x: Not used for SI.
         :return: Joint GMM Distribution over position in x and y direction.
         """
-        p_0 = self.initial_conditions['pos'].unsqueeze(1)
+        p_0 = self.initial_conditions['pos'].unsqueeze(1) # Yash: size: bs * 1 * 2
         ph = v_dist.mus.shape[-3]
-        sample_batch_dim = list(v_dist.mus.shape[0:2])
+        sample_batch_dim = list(v_dist.mus.shape[0:2]) # Yash: [num_samples, bs]
         pos_dist_sigma_matrix_list = []
 
-        pos_mus = p_0[:, None] + torch.cumsum(v_dist.mus, dim=2) * self.dt
+        pos_mus = p_0[:, None] + torch.cumsum(v_dist.mus, dim=2) * self.dt # Yash: bs*1*1*2 + num_samp*bs*ph*num_comp*num_dim. cumsum adds up velocity of previous timestamps [1, 2, 3] -> [1, 3, 6]
+        # Yash: Trying to do x = x0 + v*t. Don't understand why they are cumalative summing the velocity instead.
 
-        vel_dist_sigma_matrix = v_dist.get_covariance_matrix()
-        pos_dist_sigma_matrix_t = torch.zeros(sample_batch_dim + [v_dist.components, 2, 2], device=self.device)
+        vel_dist_sigma_matrix = v_dist.get_covariance_matrix() # Yash: Size: num_sample*bs*ph*num_components*2*2
+        pos_dist_sigma_matrix_t = torch.zeros(sample_batch_dim + [v_dist.components, 2, 2], device=self.device) # Yash: num_samples*bs*num_components*2*2
 
         for t in range(ph):
-            vel_sigma_matrix_t = vel_dist_sigma_matrix[:, :, t]
-            full_sigma_matrix_t = block_diag([pos_dist_sigma_matrix_t, vel_sigma_matrix_t])
-            pos_dist_sigma_matrix_t = self.F[..., :2, :].matmul(full_sigma_matrix_t.matmul(self.F_t)[..., :2])
+            vel_sigma_matrix_t = vel_dist_sigma_matrix[:, :, t] # Yash: Size: num_sample*bs*num_components*2*2
+            full_sigma_matrix_t = block_diag([pos_dist_sigma_matrix_t, vel_sigma_matrix_t]) # Yash: Shape: num_samples*bs*num_components*4*4
+            pos_dist_sigma_matrix_t = self.F[..., :2, :].matmul(full_sigma_matrix_t.matmul(self.F_t)[..., :2]) # Yash: I don't know what this is doing, linked to Kalman Equation
             pos_dist_sigma_matrix_list.append(pos_dist_sigma_matrix_t)
+            """
+            Yash: From what I could get from the pdb output, the pos_dist_sigma_matrix_t and vel_sigma_matrix_t are concatinated on the -3 dimension,
+            then vel_sigma_matrix_t is multiplied by 0.001 and pos_dist_sigma_matrix_t takes that value for next iteration (this part I am not perfectly sure)
+            """
 
         pos_dist_sigma_matrix = torch.stack(pos_dist_sigma_matrix_list, dim=2)
         return GMM2D.from_log_pis_mus_cov_mats(v_dist.log_pis, pos_mus, pos_dist_sigma_matrix)

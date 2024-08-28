@@ -805,7 +805,7 @@ class MultimodalGenerativeCVAE(object):
 
         # Yash: x.size() = batch_size * x_len
         # Yash: z_stacked.size() = 10 * batch_size * 10 (same indexed arrays are stacked together)
-        # Yash: num_samples=1, num_componenets=10
+        # Yash: num_samples=1, num_componenets=10 (while training)
 
         z = torch.reshape(z_stacked, (-1, self.latent.z_dim)) # Yash: 2560 * 10
         zx = torch.cat([z, x.repeat(num_samples * num_components, 1)], dim=1) # Yash: All of x concated with the [1, 0, 0 ..] then all of x concated with [0, 1, 0 ..]
@@ -854,7 +854,7 @@ class MultimodalGenerativeCVAE(object):
             mus.append(
                 mu_t.reshape(
                     num_samples, num_components, -1, 2
-                ).permute(0, 2, 1, 3).reshape(-1, 2 * num_components) # Yash: 256*20
+                ).permute(0, 2, 1, 3).reshape(-1, 2 * num_components) # Yash: 256*20 (batch_size, 2*num_components)
             )
             log_sigmas.append(
                 log_sigma_t.reshape(
@@ -872,13 +872,13 @@ class MultimodalGenerativeCVAE(object):
             input_ = torch.cat(dec_inputs, dim=1)
             state = h_state # Yash: size 2560*128
 
-        log_pis = torch.stack(log_pis, dim=1)
-        mus = torch.stack(mus, dim=1)
-        log_sigmas = torch.stack(log_sigmas, dim=1)
-        corrs = torch.stack(corrs, dim=1)
+        log_pis = torch.stack(log_pis, dim=1) # Yash: size: 256xphx1x10
+        mus = torch.stack(mus, dim=1) # Yash: size: 256xphx20
+        log_sigmas = torch.stack(log_sigmas, dim=1) # Yash: size: 256xphx20
+        corrs = torch.stack(corrs, dim=1) # Yash: size: 256xphx10
 
-        a_dist = GMM2D(torch.reshape(log_pis, [num_samples, -1, ph, num_components]), # Yash: Size: [1, 256, 10, 10]
-                       torch.reshape(mus, [num_samples, -1, ph, num_components * pred_dim]),
+        a_dist = GMM2D(torch.reshape(log_pis, [num_samples, -1, ph, num_components]), # Yash: Size: [1, 256, ph, 10]
+                       torch.reshape(mus, [num_samples, -1, ph, num_components * pred_dim]), # Yash: Size: [1, 256, ph, 10]
                        torch.reshape(log_sigmas, [num_samples, -1, ph, num_components * pred_dim]),
                        torch.reshape(corrs, [num_samples, -1, ph, num_components]))
 
